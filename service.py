@@ -4,24 +4,26 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from database import get_locations, get_products, get_flavors
 
 
-# Показать список магазинов
+# Показать список магазинов с количеством товаров
 async def show_locations(message: types.Message):
     locations = await get_locations()
     keyboard = []
     for loc in locations:
-        loc_id, name = loc
-        keyboard.append([InlineKeyboardButton(text=name, callback_data=f"location_{loc_id}")])
+        loc_id, name, product_count = loc
+        keyboard.append(
+            [InlineKeyboardButton(text=f"{name} ({product_count} товаров)", callback_data=f"location_{loc_id}")])
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
     await message.answer("Выберите магазин:", reply_markup=reply_markup)
 
 
-# Показать список товаров пользователю
+# Показать список товаров пользователю с количеством вкусов
 async def show_user_products(message: types.Message, location_id, offset=0):
     products = await get_products(location_id, offset)
     keyboard = []
     for product in products:
-        product_id, name = product
-        keyboard.append([InlineKeyboardButton(text=name, callback_data=f"product_{location_id}_{product_id}")])
+        product_id, name, flavor_count = product
+        keyboard.append([InlineKeyboardButton(text=f"{name} ({flavor_count} вкусов)",
+                                              callback_data=f"product_{location_id}_{product_id}")])
 
     if offset > 0:
         keyboard.append([InlineKeyboardButton(text="⬅️ Назад", callback_data=f"prev_{location_id}_{offset - 10}")])
@@ -39,7 +41,8 @@ async def show_user_flavors(message: types.Message, location_id, product_id, off
     keyboard = []
     for flavor in flavors:
         flavor_id, flavor_name, quantity, price = flavor
-        keyboard.append([InlineKeyboardButton(text=flavor_name, callback_data=f"flavor_{location_id}_{flavor_id}")])
+        keyboard.append([InlineKeyboardButton(text=f"{flavor_name} ({quantity} шт.)",
+                                              callback_data=f"flavor_{location_id}_{flavor_id}")])
 
     if offset > 0:
         keyboard.append([InlineKeyboardButton(text="⬅️ Назад",
@@ -53,13 +56,14 @@ async def show_user_flavors(message: types.Message, location_id, product_id, off
     await message.answer("Выберите вкус:", reply_markup=reply_markup)
 
 
-# Показать список товаров администратору
+# Показать список товаров администратору с количеством вкусов
 async def show_admin_products(message: types.Message, location_id, offset=0):
     products = await get_products(location_id, offset)
     keyboard = []
     for product in products:
-        product_id, name = product
-        keyboard.append([InlineKeyboardButton(text=name, callback_data=f"admin_product_{location_id}_{product_id}")])
+        product_id, name, flavor_count = product
+        keyboard.append([InlineKeyboardButton(text=f"{name} ({flavor_count} вкусов)",
+                                              callback_data=f"admin_product_{location_id}_{product_id}")])
 
     if offset > 0:
         keyboard.append(
@@ -80,7 +84,7 @@ async def show_admin_flavors(message: types.Message, location_id, product_id, of
     keyboard = []
     for flavor in flavors:
         flavor_id, flavor_name, quantity, price = flavor
-        keyboard.append([InlineKeyboardButton(text=f"{flavor_name} ({quantity} шт.)",
+        keyboard.append([InlineKeyboardButton(text=f"{flavor_name} ({quantity} шт., {price} руб.)",
                                               callback_data=f"admin_flavor_{location_id}_{flavor_id}")])
 
     if offset > 0:

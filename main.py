@@ -5,8 +5,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, CallbackQuery
 
-from database import (get_product_by_id, get_flavor_by_id, update_flavor_quantity, init_db,
-                     add_product, add_flavor, delete_product_db, delete_flavor_db)
+from database import (get_product_by_id, get_flavor_by_id, update_flavor_quantity, update_flavor_price,
+                     update_product_name, init_db, add_product, add_flavor, delete_product_db, delete_flavor_db)
 from service import show_locations, show_user_products, show_user_flavors, show_admin_products, show_admin_flavors
 
 API_TOKEN = '8037910201:AAHEwbfNG4feas1J4N71inZAO0l-B8WZS6o'
@@ -21,6 +21,8 @@ class AdminStates(StatesGroup):
     EnterNewFlavorQuantity = State()
     EnterNewFlavorPrice = State()
     EnterManualQuantity = State()
+    EnterNewProductNameEdit = State()
+    EnterNewFlavorPriceEdit = State()
 
 @dp.message(CommandStart())
 async def cmd_start(message: Message):
@@ -44,8 +46,12 @@ async def user_product(callback: CallbackQuery):
 async def user_flavor(callback: CallbackQuery):
     location_id, flavor_id = map(int, callback.data.split("_")[1:])
     flavor = await get_flavor_by_id(flavor_id)
+    keyboard = [[InlineKeyboardButton(text="Назад к вкусам", callback_data=f"product_{location_id}_{flavor[1]}")]]
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
     await bot.answer_callback_query(callback.id)
-    await bot.send_message(callback.from_user.id, f"Название: {flavor[2]}\nКоличество: {flavor[3]}\nЦена: {flavor[4]} руб.")
+    await bot.send_message(callback.from_user.id,
+                           f"Название: {flavor[2]}\nКоличество: {flavor[3]}\nЦена: {flavor[4]} руб.",
+                           reply_markup=reply_markup)
 
 @dp.callback_query(lambda c: c.data.startswith("prev_"))
 async def user_prev(callback: CallbackQuery):
@@ -86,6 +92,19 @@ async def admin_location(callback: CallbackQuery):
 @dp.callback_query(lambda c: c.data.startswith("admin_product_"))
 async def admin_product(callback: CallbackQuery):
     location_id, product_id = map(int, callback.data.split("_")[2:])
+    product = await get_product_by_id(product_id)
+    keyboard = [
+        [InlineKeyboardButton(text="❌ Удалить товар", callback_data=f"delete_product_{product_id}")],
+        [InlineKeyboardButton(text="✏️ Редактировать название", callback_data=f"edit_product_name_{product_id}")],
+        [InlineKeyboardButton(text="Вкусы", callback_data=f"show_flavors_{location_id}_{product_id}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    await bot.answer_callback_query(callback.id)
+    await bot.send_message(callback.from_user.id, f"Товар: {product[2]}", reply_markup=reply_markup)
+
+@dp.callback_query(lambda c: c.data.startswith("show_flavors_"))
+async def admin_show_flavors(callback: CallbackQuery):
+    location_id, product_id = map(int, callback.data.split("_")[2:])
     await bot.answer_callback_query(callback.id)
     await show_admin_flavors(callback.message, location_id, product_id)
 
@@ -96,11 +115,13 @@ async def admin_flavor(callback: CallbackQuery):
     keyboard = [
         [InlineKeyboardButton(text="❌ Удалить", callback_data=f"delete_flavor_{flavor_id}")],
         [InlineKeyboardButton(text="✏️ Изменить количество", callback_data=f"change_quantity_{flavor_id}")],
-        [InlineKeyboardButton(text="Назад к вкусам", callback_data=f"admin_product_{location_id}_{flavor[1]}")]
+        [InlineKeyboardButton(text="💰 Изменить цену", callback_data=f"edit_flavor_price_{flavor_id}")],
+        [InlineKeyboardButton(text="Назад к вкусам", callback_data=f"show_flavors_{location_id}_{flavor[1]}")]
     ]
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
     await bot.answer_callback_query(callback.id)
-    await bot.send_message(callback.from_user.id, f"Название: {flavor[2]}\nКоличество: {flavor[3]}\nЦена: {flavor[4]} руб.",
+    await bot.send_message(callback.from_user.id,
+                           f"Вкус: {flavor[2]}\nКоличество: {flavor[3]}\nЦена: {flavor[4]} руб.",
                            reply_markup=reply_markup)
 
 @dp.callback_query(lambda c: c.data.startswith("change_quantity_"))
@@ -111,7 +132,7 @@ async def admin_change_quantity(callback: CallbackQuery):
         [InlineKeyboardButton(text="➕ +1", callback_data=f"increase_{flavor_id}")],
         [InlineKeyboardButton(text="➖ -1", callback_data=f"decrease_{flavor_id}")],
         [InlineKeyboardButton(text="📝 Ввести вручную", callback_data=f"manual_{flavor_id}")],
-        [InlineKeyboardButton(text="Назад", callback_data=f"admin_product_{callback.message.chat.id}_{flavor[1]}")]
+        [InlineKeyboardButton(text="Назад", callback_data=f"show_flavors_{callback.message.chat.id}_{flavor[1]}")]
     ]
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
     await bot.answer_callback_query(callback.id)
@@ -142,6 +163,22 @@ async def admin_manual(callback: CallbackQuery, state: FSMContext):
     await state.update_data(flavor_id=flavor_id)
     await bot.answer_callback_query(callback.id)
     await bot.send_message(callback.from_user.id, "Введите новое количество:")
+
+@dp.callback_query(lambda c: c.data.startswith("edit_product_name_"))
+async def admin_edit_product_name(callback: CallbackQuery, state: FSMContext):
+    product_id = int(callback.data.split("_")[3])
+    await state.set_state(AdminStates.EnterNewProductNameEdit)
+    await state.update_data(product_id=product_id)
+    await bot.answer_callback_query(callback.id)
+    await bot.send_message(callback.from_user.id, "Введите новое название товара:")
+
+@dp.callback_query(lambda c: c.data.startswith("edit_flavor_price_"))
+async def admin_edit_flavor_price(callback: CallbackQuery, state: FSMContext):
+    flavor_id = int(callback.data.split("_")[3])
+    await state.set_state(AdminStates.EnterNewFlavorPriceEdit)
+    await state.update_data(flavor_id=flavor_id)
+    await bot.answer_callback_query(callback.id)
+    await bot.send_message(callback.from_user.id, "Введите новую цену для вкуса:")
 
 @dp.callback_query(lambda c: c.data.startswith("admin_prev_"))
 async def admin_prev(callback: CallbackQuery):
@@ -190,9 +227,9 @@ async def admin_delete_flavor(callback: CallbackQuery):
     await bot.answer_callback_query(callback.id)
     await bot.send_message(callback.from_user.id, "Вкус успешно удален")
 
-@dp.callback_query(lambda c: c.data.startswith("delete_"))
+@dp.callback_query(lambda c: c.data.startswith("delete_product_"))
 async def admin_delete_product(callback: CallbackQuery):
-    product_id = int(callback.data.split("_")[1])
+    product_id = int(callback.data.split("_")[2])
     await delete_product_db(product_id)
     await bot.answer_callback_query(callback.id)
     await bot.send_message(callback.from_user.id, "Товар и все его вкусы удалены")
@@ -248,6 +285,31 @@ async def process_flavor_price(message: Message, state: FSMContext):
         await state.clear()
     except ValueError:
         await message.answer("Введите корректную цену (например, 500)")
+
+@dp.message(AdminStates.EnterNewProductNameEdit)
+async def process_product_name_edit(message: Message, state: FSMContext):
+    data = await state.get_data()
+    product_id = data['product_id']
+    new_name = message.text
+    await update_product_name(product_id, new_name)
+    keyboard = [[InlineKeyboardButton(text="К выбору магазина", callback_data="locations")]]
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    await message.answer(f"Название товара обновлено: {new_name}", reply_markup=reply_markup)
+    await state.clear()
+
+@dp.message(AdminStates.EnterNewFlavorPriceEdit)
+async def process_flavor_price_edit(message: Message, state: FSMContext):
+    data = await state.get_data()
+    flavor_id = data['flavor_id']
+    new_price = int(message.text)
+    if new_price <= 0:
+        await message.answer("Введите корректную цену (например, 500)")
+        return
+    await update_flavor_price(flavor_id, new_price)
+    keyboard = [[InlineKeyboardButton(text="К выбору магазина", callback_data="locations")]]
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    await message.answer(f"Цена вкуса обновлена: {new_price} руб.", reply_markup=reply_markup)
+    await state.clear()
 
 async def on_startup(dp):
     await init_db()
