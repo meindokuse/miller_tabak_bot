@@ -3,17 +3,9 @@ import aiosqlite
 async def init_db():
     async with aiosqlite.connect("shop.db") as db:
         await db.execute('''
-            CREATE TABLE IF NOT EXISTS Locations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL
-            )
-        ''')
-        await db.execute('''
             CREATE TABLE IF NOT EXISTS Products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                location_id INTEGER,
-                name TEXT NOT NULL,
-                FOREIGN KEY (location_id) REFERENCES Locations(id)
+                name TEXT NOT NULL
             )
         ''')
         await db.execute('''
@@ -26,36 +18,21 @@ async def init_db():
                 FOREIGN KEY (product_id) REFERENCES Products(id)
             )
         ''')
-        await db.execute('INSERT OR IGNORE INTO Locations (id, name) VALUES (1, "Магазин 1")')
-        await db.execute('INSERT OR IGNORE INTO Locations (id, name) VALUES (2, "Магазин 2")')
-        await db.execute('INSERT OR IGNORE INTO Locations (id, name) VALUES (3, "Магазин 3")')
         await db.commit()
 
-# Получение списка магазинов с количеством товаров
-async def get_locations():
-    async with aiosqlite.connect('shop.db') as db:
-        cursor = await db.execute('''
-            SELECT l.id, l.name, COUNT(p.id) as product_count
-            FROM Locations l
-            LEFT JOIN Products p ON l.id = p.location_id
-            GROUP BY l.id, l.name
-        ''')
-        return await cursor.fetchall()
-
-# Получение списка товаров по локации с количеством вкусов
-async def get_products(location_id, offset=0, limit=10):
+# Получение списка товаров с количеством вкусов и пагинацией
+async def get_products(offset=0, limit=10):
     async with aiosqlite.connect('shop.db') as db:
         cursor = await db.execute('''
             SELECT p.id, p.name, COUNT(f.id) as flavor_count
             FROM Products p
             LEFT JOIN Flavors f ON p.id = f.product_id
-            WHERE p.location_id = ?
             GROUP BY p.id, p.name
             LIMIT ? OFFSET ?
-        ''', (location_id, limit, offset))
+        ''', (limit, offset))
         return await cursor.fetchall()
 
-# Получение списка вкусов для товара
+# Получение списка вкусов для товара с пагинацией
 async def get_flavors(product_id, offset=0, limit=10):
     async with aiosqlite.connect('shop.db') as db:
         cursor = await db.execute(
@@ -67,7 +44,7 @@ async def get_flavors(product_id, offset=0, limit=10):
 # Получение информации о товаре по ID
 async def get_product_by_id(product_id):
     async with aiosqlite.connect('shop.db') as db:
-        cursor = await db.execute('SELECT id, location_id, name FROM Products WHERE id = ?', (product_id,))
+        cursor = await db.execute('SELECT id, name FROM Products WHERE id = ?', (product_id,))
         return await cursor.fetchone()
 
 # Получение информации о вкусе по ID
@@ -80,9 +57,9 @@ async def get_flavor_by_id(flavor_id):
         return await cursor.fetchone()
 
 # Добавление нового товара
-async def add_product(location_id, name):
+async def add_product(name):
     async with aiosqlite.connect('shop.db') as db:
-        cursor = await db.execute('INSERT INTO Products (location_id, name) VALUES (?, ?)', (location_id, name))
+        cursor = await db.execute('INSERT INTO Products (name) VALUES (?)', (name,))
         await db.commit()
         return cursor.lastrowid
 
