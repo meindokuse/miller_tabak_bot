@@ -1,7 +1,7 @@
 from aiogram import types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from database import get_products, get_aromas, get_low_stock_aromas, get_total_quantity, get_aromas_by_category
+from strastnoy.database import get_products, get_aromas, get_low_stock_aromas, get_total_quantity, get_aromas_by_category
 
 
 # Показать список товаров администратору с количеством ароматов
@@ -57,6 +57,7 @@ async def show_admin_aromas(message: types.Message, product_id, offset=0, edit_m
         keyboard.append(
             [InlineKeyboardButton(text="Вперед ➡️", callback_data=f"aroma_next_{product_id}_{offset + 10}")])
     keyboard.append([InlineKeyboardButton(text="➕ Добавить аромат", callback_data=f"add_aroma_{product_id}")])
+    keyboard.append([InlineKeyboardButton(text="📦 Поставка", callback_data=f"supply_{product_id}")])
     keyboard.append([InlineKeyboardButton(text="Назад к товарам", callback_data="main")])
 
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
