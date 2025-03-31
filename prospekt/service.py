@@ -1,7 +1,7 @@
 from aiogram import types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from strastnoy.database import get_products, get_aromas, get_low_stock_aromas, get_total_quantity, get_aromas_by_category
+from database import get_products, get_aromas, get_low_stock_aromas, get_total_quantity, get_aromas_by_category
 
 
 # Показать список товаров администратору с количеством ароматов

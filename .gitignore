@@ -1,4 +1,7 @@
 .venv
-shop.db
+strastnoy/data/shop.db
+nikolskaya/data/shop.db
+prospekt/data/shop.db
 identifier.sqlite
 .gitignore
+.env

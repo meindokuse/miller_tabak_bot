@@ -1,4 +1,6 @@
 import asyncio
+import os
+
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
@@ -11,10 +13,9 @@ from database import (get_product_by_id, get_aroma_by_id, update_aroma_quantity,
 from service import show_admin_products, show_admin_aromas, show_low_stock_aromas, show_inventory, \
     show_aromas_by_category
 
-API_TOKEN = '7992929725:AAGO_AxcmOT7UIeqjQrP0VgDx23rlo8MnS8'
 TRUSTED_CHAT_IDS = [1082039395, 444627449, 883974728]  # Список доверенных chat_id
 
-bot = Bot(token=API_TOKEN)
+bot = Bot(token=os.getenv("BOT_TOKEN"))
 dp = Dispatcher()
 
 

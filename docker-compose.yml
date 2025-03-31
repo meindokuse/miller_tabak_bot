@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  strastnoy:
+    build: ./strastnoy
+    container_name: strastnoy_bot
+    restart: unless-stopped
+    env_file: .env  # Подключаем общий .env
+    environment:
+      - BOT_TOKEN=${TOKEN_S}  # Используем переменную из .env
+    volumes:
+      - ./strastnoy/data:/app/data  # Сохраняем БД на сервере
+
+  nikolskaya:
+    build: ./nikolskaya
+    container_name: nikolskaya_bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - BOT_TOKEN=${TOKEN_N}
+    volumes:
+      - ./nikolskaya/data:/app/data
+
+  prospekt:
+    build: ./prospekt
+    container_name: prospekt_bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - BOT_TOKEN=${TOKEN_P}
+    volumes:
+      - ./prospekt/data:/app/data
