@@ -57,6 +57,7 @@ async def show_admin_aromas(message: types.Message, product_id, offset=0, edit_m
         keyboard.append(
             [InlineKeyboardButton(text="Вперед ➡️", callback_data=f"aroma_next_{product_id}_{offset + 10}")])
     keyboard.append([InlineKeyboardButton(text="➕ Добавить аромат", callback_data=f"add_aroma_{product_id}")])
+    keyboard.append([InlineKeyboardButton(text="📋 Добавить ароматы списком", callback_data=f"bulk_add_aromas_{product_id}")])
     keyboard.append([InlineKeyboardButton(text="📦 Поставка", callback_data=f"supply_{product_id}")])
     keyboard.append([InlineKeyboardButton(text="Назад к товарам", callback_data="main")])
 

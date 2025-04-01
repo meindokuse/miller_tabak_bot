@@ -13,11 +13,10 @@ from database import (get_product_by_id, get_aroma_by_id, update_aroma_quantity,
 from service import show_admin_products, show_admin_aromas, show_low_stock_aromas, show_inventory, \
     show_aromas_by_category
 
-TRUSTED_CHAT_IDS = [1082039395, 444627449, 883974728]  # Список доверенных chat_id
+TRUSTED_CHAT_IDS = [1082039395, 444627449, 442433579]  # Список доверенных chat_id
 
 bot = Bot(token=os.getenv("BOT_TOKEN"))
 dp = Dispatcher()
-
 
 class AdminStates(StatesGroup):
     EnterNewProductName = State()
@@ -28,6 +27,7 @@ class AdminStates(StatesGroup):
     EnterNewProductNameEdit = State()
     EnterNewAromaCategoryEdit = State()
     EnterSupplyData = State()
+    EnterBulkAddAromas = State()
 
 
 # Проверка доверенного chat_id
@@ -117,8 +117,12 @@ async def admin_change_quantity(callback: CallbackQuery):
     aroma_id = int(callback.data.split("_")[2])
     aroma = await get_aroma_by_id(aroma_id)
     keyboard = [
-        [InlineKeyboardButton(text="➕ +100 гр", callback_data=f"increase_{aroma_id}")],
-        [InlineKeyboardButton(text="➖ -100 гр", callback_data=f"decrease_{aroma_id}")],
+        [InlineKeyboardButton(text="➕ +100 гр", callback_data=f"increase_{aroma_id}_100")],
+        [InlineKeyboardButton(text="➖ -100 гр", callback_data=f"decrease_{aroma_id}_100")],
+        [InlineKeyboardButton(text="➕ +250 гр", callback_data=f"increase_{aroma_id}_250")],
+        [InlineKeyboardButton(text="➖ -250 гр", callback_data=f"decrease_{aroma_id}_250")],
+        [InlineKeyboardButton(text="➕ +50 гр", callback_data=f"increase_{aroma_id}_50")],
+        [InlineKeyboardButton(text="➖ -50 гр", callback_data=f"decrease_{aroma_id}_50")],
         [InlineKeyboardButton(text="📝 Ввести вручную", callback_data=f"manual_{aroma_id}")],
         [InlineKeyboardButton(text="Назад к ароматам", callback_data=f"show_aromas_{aroma[1]}")]
     ]
@@ -137,9 +141,10 @@ async def admin_increase(callback: CallbackQuery):
     if not is_trusted_user(callback.from_user.id):
         await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
         return
+    increase = int(callback.data.split("_")[2])
     aroma_id = int(callback.data.split("_")[1])
     aroma = await get_aroma_by_id(aroma_id)
-    new_quantity = aroma[3] + 100
+    new_quantity = aroma[3] + increase
     await update_aroma_quantity(aroma_id, new_quantity)
     await bot.answer_callback_query(callback.id)
     await show_admin_aromas(callback.message, aroma[1], edit_message_id=callback.message.message_id)
@@ -150,9 +155,10 @@ async def admin_decrease(callback: CallbackQuery):
     if not is_trusted_user(callback.from_user.id):
         await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
         return
+    decrease = int(callback.data.split("_")[2])
     aroma_id = int(callback.data.split("_")[1])
     aroma = await get_aroma_by_id(aroma_id)
-    new_quantity = max(0, aroma[3] - 100)
+    new_quantity = max(0, aroma[3] - decrease)
     await update_aroma_quantity(aroma_id, new_quantity)
     await bot.answer_callback_query(callback.id)
     await show_admin_aromas(callback.message, aroma[1], edit_message_id=callback.message.message_id)
@@ -541,6 +547,102 @@ async def process_supply_data(message: Message, state: FSMContext):
         response_text += "Ошибки:\n" + "\n".join(errors)
     else:
         response_text += "Все ароматы успешно обновлены!"
+
+    # Добавляем кнопку для перехода к списку ароматов
+    keyboard = [[InlineKeyboardButton(text="К списку ароматов", callback_data=f"show_aromas_{product_id}")]]
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+    await bot.delete_message(chat_id=str(message.chat.id), message_id=message.message_id)
+    await bot.edit_message_text(
+        text=response_text,
+        chat_id=str(message.chat.id),
+        message_id=message_id,
+        reply_markup=reply_markup
+    )
+
+    await state.clear()
+
+@dp.callback_query(lambda c: c.data.startswith("bulk_add_aromas_"))
+async def admin_bulk_add_aromas(callback: CallbackQuery, state: FSMContext):
+    if not is_trusted_user(callback.from_user.id):
+        await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
+        return
+    product_id = int(callback.data.split("_")[3])
+    await state.set_state(AdminStates.EnterBulkAddAromas)
+    await state.update_data(product_id=product_id, message_id=callback.message.message_id)
+    await bot.answer_callback_query(callback.id)
+    await bot.edit_message_text(
+        text="Введите список новых ароматов в формате:\n(название) (кол-во грамм) (категория)\nПример:\nклубника 1000 A\nяблоко 1999 B\nкиви 800 C\nвиноград 900 A",
+        chat_id=str(callback.message.chat.id),
+        message_id=callback.message.message_id
+    )
+
+
+@dp.message(AdminStates.EnterBulkAddAromas)
+async def process_bulk_add_aromas(message: Message, state: FSMContext):
+    if not is_trusted_user(message.from_user.id):
+        await message.answer("Доступ только для доверенных администраторов.")
+        return
+    data = await state.get_data()
+    product_id = data['product_id']
+    message_id = data['message_id']
+
+    # Получаем существующие ароматы, чтобы избежать дубликатов
+    existing_aromas = await get_aromas(product_id, offset=0, limit=9999)
+    existing_aroma_names = {aroma[1].lower() for aroma in existing_aromas}
+
+    # Разбираем введённые данные
+    lines = message.text.strip().split('\n')
+    added_aromas = []
+    errors = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            errors.append(f"Неверный формат строки: {line} (ожидается: название количество категория)")
+            continue
+
+        # Название аромата может состоять из нескольких слов, количество и категория — последние два слова
+        category = parts[-1].upper()
+        quantity_str = parts[-2]
+        aroma_name = " ".join(parts[:-2])
+
+        # Проверяем категорию
+        if category not in ['A', 'B', 'C']:
+            errors.append(f"Неверная категория в строке: {line} (должно быть A, B или C)")
+            continue
+
+        # Проверяем количество
+        try:
+            quantity = int(quantity_str)
+            if quantity < 0:
+                errors.append(f"Количество не может быть отрицательным: {line}")
+                continue
+        except ValueError:
+            errors.append(f"Неверное количество в строке: {line}")
+            continue
+
+        # Проверяем, существует ли уже аромат
+        if aroma_name.lower() in existing_aroma_names:
+            errors.append(f"Аромат уже существует: {aroma_name}")
+            continue
+
+        # Добавляем новый аромат
+        await add_aroma(product_id, aroma_name, quantity, category)
+        added_aromas.append(f"{aroma_name} ({quantity} гр, {category})")
+        existing_aroma_names.add(aroma_name.lower())
+
+    # Формируем ответ
+    response_text = "📋 Результат добавления ароматов:\n\n"
+    if added_aromas:
+        response_text += "Добавлены:\n" + "\n".join(added_aromas) + "\n\n"
+    if errors:
+        response_text += "Ошибки:\n" + "\n".join(errors)
+    else:
+        response_text += "Все ароматы успешно добавлены!"
 
     # Добавляем кнопку для перехода к списку ароматов
     keyboard = [[InlineKeyboardButton(text="К списку ароматов", callback_data=f"show_aromas_{product_id}")]]
