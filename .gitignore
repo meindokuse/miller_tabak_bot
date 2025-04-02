@@ -5,3 +5,4 @@ prospekt/data/shop.db
 identifier.sqlite
 .gitignore
 .env
+.idea

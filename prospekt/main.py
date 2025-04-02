@@ -17,7 +17,6 @@ TRUSTED_CHAT_IDS = [1082039395, 444627449, 784523005]
 
 bot = Bot(token=os.getenv("BOT_TOKEN"))
 dp = Dispatcher()
-
 class AdminStates(StatesGroup):
     EnterNewProductName = State()
     EnterNewAromaName = State()
@@ -84,6 +83,24 @@ async def admin_show_aromas(callback: CallbackQuery):
     product_id = int(callback.data.split("_")[2])
     await bot.answer_callback_query(callback.id)
     await show_admin_aromas(callback.message, product_id, edit_message_id=callback.message.message_id)
+
+@dp.callback_query(lambda c: c.data.startswith("aroma_next_"))
+async def admin_aroma_next(callback: CallbackQuery):
+    if not is_trusted_user(callback.from_user.id):
+        await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
+        return
+    product_id, offset = map(int, callback.data.split("_")[2:])
+    await bot.answer_callback_query(callback.id)
+    await show_admin_aromas(callback.message, product_id, offset, edit_message_id=callback.message.message_id)
+
+@dp.callback_query(lambda c: c.data.startswith("aroma_prev_"))
+async def admin_aroma_prev(callback: CallbackQuery):
+    if not is_trusted_user(callback.from_user.id):
+        await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
+        return
+    product_id, offset = map(int, callback.data.split("_")[2:])
+    await bot.answer_callback_query(callback.id)
+    await show_admin_aromas(callback.message, product_id, offset, edit_message_id=callback.message.message_id)
 
 
 @dp.callback_query(lambda c: c.data.startswith("aroma_"))
@@ -230,26 +247,6 @@ async def admin_next(callback: CallbackQuery):
     offset = int(callback.data.split("_")[1])
     await bot.answer_callback_query(callback.id)
     await show_admin_products(callback.message, offset, edit_message_id=callback.message.message_id)
-
-
-@dp.callback_query(lambda c: c.data.startswith("aroma_prev_"))
-async def admin_aroma_prev(callback: CallbackQuery):
-    if not is_trusted_user(callback.from_user.id):
-        await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
-        return
-    product_id, offset = map(int, callback.data.split("_")[2:])
-    await bot.answer_callback_query(callback.id)
-    await show_admin_aromas(callback.message, product_id, offset, edit_message_id=callback.message.message_id)
-
-
-@dp.callback_query(lambda c: c.data.startswith("aroma_next_"))
-async def admin_aroma_next(callback: CallbackQuery):
-    if not is_trusted_user(callback.from_user.id):
-        await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
-        return
-    product_id, offset = map(int, callback.data.split("_")[2:])
-    await bot.answer_callback_query(callback.id)
-    await show_admin_aromas(callback.message, product_id, offset, edit_message_id=callback.message.message_id)
 
 
 @dp.callback_query(lambda c: c.data == "add_product")
