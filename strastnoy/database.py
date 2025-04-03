@@ -1,4 +1,5 @@
 import aiosqlite
+DB_PATH = "data/shop.db"
 
 async def init_db():
     async with aiosqlite.connect("data/shop.db") as db:
@@ -22,46 +23,96 @@ async def init_db():
 
 # Получение списка товаров с количеством ароматов и пагинацией (без сортировки в SQL)
 async def get_products(offset=0, limit=10):
-    async with aiosqlite.connect('data/shop.db') as db:
-        cursor = await db.execute('''
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """
             SELECT p.id, p.name, COUNT(a.id) as aroma_count
-            FROM Products p
-            LEFT JOIN Aromas a ON p.id = a.product_id
+            FROM products p
+            LEFT JOIN aromas a ON p.id = a.product_id
             GROUP BY p.id, p.name
+            ORDER BY p.name COLLATE NOCASE
             LIMIT ? OFFSET ?
-        ''', (limit, offset))
+            """,
+            (limit, offset)
+        )
         return await cursor.fetchall()
 
-# Получение списка ароматов для товара с пагинацией (без сортировки в SQL)
 async def get_aromas(product_id, offset=0, limit=10):
-    async with aiosqlite.connect('data/shop.db') as db:
+    async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
-            'SELECT id, aroma_name, quantity, category FROM Aromas WHERE product_id = ? LIMIT ? OFFSET ?',
+            """
+            SELECT id, aroma_name, quantity, category
+            FROM aromas
+            WHERE product_id = ?
+            ORDER BY aroma_name COLLATE NOCASE
+            LIMIT ? OFFSET ?
+            """,
             (product_id, limit, offset)
         )
         return await cursor.fetchall()
 
-# Получение всех ароматов с количеством < 251 гр (без сортировки в SQL)
-async def get_low_stock_aromas():
-    async with aiosqlite.connect('data/shop.db') as db:
-        cursor = await db.execute('''
+async def get_low_stock_aromas(offset=0, limit=10):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """
             SELECT p.name, a.aroma_name, a.quantity, a.category
-            FROM Aromas a
-            JOIN Products p ON a.product_id = p.id
+            FROM aromas a
+            JOIN products p ON a.product_id = p.id
             WHERE a.quantity < 251
-        ''')
+            ORDER BY p.name COLLATE NOCASE, a.aroma_name COLLATE NOCASE
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset)
+        )
         return await cursor.fetchall()
 
 # Получение ароматов по категории (A, B, C) (без сортировки в SQL)
-async def get_aromas_by_category(category):
-    async with aiosqlite.connect('data/shop.db') as db:
-        cursor = await db.execute('''
+async def get_aromas_by_category(category, offset=0, limit=10):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """
             SELECT p.name, a.aroma_name, a.quantity, a.category
-            FROM Aromas a
-            JOIN Products p ON a.product_id = p.id
+            FROM aromas a
+            JOIN products p ON a.product_id = p.id
             WHERE a.category = ?
-        ''', (category,))
+            ORDER BY p.name COLLATE NOCASE, a.aroma_name COLLATE NOCASE
+            LIMIT ? OFFSET ?
+            """,
+            (category, limit, offset)
+        )
         return await cursor.fetchall()
+
+async def get_products_count():
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT COUNT(*) FROM products")
+        result = await cursor.fetchone()
+        return result[0]
+
+async def get_aromas_count(product_id):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM aromas WHERE product_id = ?",
+            (product_id,)
+        )
+        result = await cursor.fetchone()
+        return result[0]
+
+async def get_low_stock_aromas_count():
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM aromas WHERE quantity < 251"
+        )
+        result = await cursor.fetchone()
+        return result[0]
+
+async def get_aromas_by_category_count(category):
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM aromas WHERE category = ?",
+            (category,)
+        )
+        result = await cursor.fetchone()
+        return result[0]
 
 # Подсчёт общего количества грамм всех ароматов
 async def get_total_quantity():

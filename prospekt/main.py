@@ -17,6 +17,8 @@ TRUSTED_CHAT_IDS = [1082039395, 444627449, 784523005]
 
 bot = Bot(token=os.getenv("BOT_TOKEN"))
 dp = Dispatcher()
+
+
 class AdminStates(StatesGroup):
     EnterNewProductName = State()
     EnterNewAromaName = State()
@@ -84,6 +86,7 @@ async def admin_show_aromas(callback: CallbackQuery):
     await bot.answer_callback_query(callback.id)
     await show_admin_aromas(callback.message, product_id, edit_message_id=callback.message.message_id)
 
+
 @dp.callback_query(lambda c: c.data.startswith("aroma_next_"))
 async def admin_aroma_next(callback: CallbackQuery):
     if not is_trusted_user(callback.from_user.id):
@@ -92,6 +95,7 @@ async def admin_aroma_next(callback: CallbackQuery):
     product_id, offset = map(int, callback.data.split("_")[2:])
     await bot.answer_callback_query(callback.id)
     await show_admin_aromas(callback.message, product_id, offset, edit_message_id=callback.message.message_id)
+
 
 @dp.callback_query(lambda c: c.data.startswith("aroma_prev_"))
 async def admin_aroma_prev(callback: CallbackQuery):
@@ -303,13 +307,33 @@ async def admin_delete_product(callback: CallbackQuery):
     await show_admin_products(callback.message, edit_message_id=callback.message.message_id)
 
 
+@dp.callback_query(lambda c: c.data.startswith("low_stock_prev_"))
+async def admin_low_stock_prev(callback: CallbackQuery):
+    if not is_trusted_user(callback.from_user.id):
+        await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
+        return
+    offset = int(callback.data.split("_")[3])
+    await bot.answer_callback_query(callback.id)
+    await show_low_stock_aromas(callback.message, offset, edit_message_id=callback.message.message_id)
+
+
+@dp.callback_query(lambda c: c.data.startswith("low_stock_next_"))
+async def admin_low_stock_next(callback: CallbackQuery):
+    if not is_trusted_user(callback.from_user.id):
+        await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
+        return
+    offset = int(callback.data.split("_")[3])
+    await bot.answer_callback_query(callback.id)
+    await show_low_stock_aromas(callback.message, offset, edit_message_id=callback.message.message_id)
+
+
 @dp.callback_query(lambda c: c.data == "low_stock")
 async def admin_low_stock(callback: CallbackQuery):
     if not is_trusted_user(callback.from_user.id):
         await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
         return
     await bot.answer_callback_query(callback.id)
-    await show_low_stock_aromas(callback.message, edit_message_id=callback.message.message_id)
+    await show_low_stock_aromas(callback.message, offset=0, edit_message_id=callback.message.message_id)
 
 
 @dp.callback_query(lambda c: c.data == "inventory")
@@ -321,14 +345,38 @@ async def admin_inventory(callback: CallbackQuery):
     await show_inventory(callback.message, edit_message_id=callback.message.message_id)
 
 
-@dp.callback_query(lambda c: c.data.startswith("category_"))
-async def admin_category(callback: CallbackQuery):
+# Сначала более специфичные обработчики
+@dp.callback_query(lambda c: c.data.startswith("category_") and ("_prev_") in c.data )
+async def admin_category_prev(callback: CallbackQuery):
+    if not is_trusted_user(callback.from_user.id):
+        await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
+        return
+    parts = callback.data.split("_")
+    category = parts[1]  # "A", "B" или "C"
+    offset = int(parts[3])
+    await bot.answer_callback_query(callback.id)
+    await show_aromas_by_category(callback.message, category, offset, edit_message_id=callback.message.message_id)
+
+@dp.callback_query(lambda c: c.data.startswith("category_") and ("_next_") in c.data)
+async def admin_category_next(callback: CallbackQuery):
+    if not is_trusted_user(callback.from_user.id):
+        await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
+        return
+    parts = callback.data.split("_")
+    category = parts[1]  # "A", "B" или "C"
+    offset = int(parts[3])
+    await bot.answer_callback_query(callback.id)
+    await show_aromas_by_category(callback.message, category, offset, edit_message_id=callback.message.message_id)
+
+# Потом более общий обработчик
+@dp.callback_query(lambda c: c.data in ["category_A", "category_B", "category_C"])
+async def admin_category(callback: CallbackQuery, state: FSMContext):
     if not is_trusted_user(callback.from_user.id):
         await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
         return
     category = callback.data.split("_")[1]  # "A", "B" или "C"
     await bot.answer_callback_query(callback.id)
-    await show_aromas_by_category(callback.message, category, edit_message_id=callback.message.message_id)
+    await show_aromas_by_category(callback.message, category, offset=0, edit_message_id=callback.message.message_id)
 
 
 @dp.callback_query(lambda c: c.data.startswith("supply_"))
@@ -559,6 +607,7 @@ async def process_supply_data(message: Message, state: FSMContext):
 
     await state.clear()
 
+
 @dp.callback_query(lambda c: c.data.startswith("bulk_add_aromas_"))
 async def admin_bulk_add_aromas(callback: CallbackQuery, state: FSMContext):
     if not is_trusted_user(callback.from_user.id):
@@ -654,6 +703,7 @@ async def process_bulk_add_aromas(message: Message, state: FSMContext):
     )
 
     await state.clear()
+
 
 async def on_startup(dp):
     await init_db()
