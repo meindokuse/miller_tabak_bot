@@ -15,7 +15,7 @@ from service import show_admin_products, show_admin_aromas, show_low_stock_aroma
 
 TRUSTED_CHAT_IDS = [1082039395, 444627449, 442433579]  # Список доверенных chat_id
 
-bot = Bot(token=os.getenv("TOKEN_N"))
+bot = Bot(token=os.getenv("BOT_TOKEN"))
 dp = Dispatcher()
 
 

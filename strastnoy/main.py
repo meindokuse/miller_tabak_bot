@@ -15,7 +15,7 @@ from service import show_admin_products, show_admin_aromas, show_low_stock_aroma
 
 TRUSTED_CHAT_IDS = [1082039395, 444627449, 883974728]  # Список доверенных chat_id
 
-bot = Bot(token=os.getenv("TOKEN_S"))
+bot = Bot(token=os.getenv("BOT_TOKEN"))
 dp = Dispatcher()
 
 
@@ -144,8 +144,8 @@ async def admin_change_quantity(callback: CallbackQuery):
         [InlineKeyboardButton(text="➖ -100 гр", callback_data=f"decrease_{aroma_id}_100")],
         [InlineKeyboardButton(text="➕ +250 гр", callback_data=f"increase_{aroma_id}_250")],
         [InlineKeyboardButton(text="➖ -250 гр", callback_data=f"decrease_{aroma_id}_250")],
-        [InlineKeyboardButton(text="➕ +50 гр", callback_data=f"increase_{aroma_id}_50")],
-        [InlineKeyboardButton(text="➖ -50 гр", callback_data=f"decrease_{aroma_id}_50")],
+        [InlineKeyboardButton(text="➕ +200 гр", callback_data=f"increase_{aroma_id}_200")],
+        [InlineKeyboardButton(text="➖ -200 гр", callback_data=f"decrease_{aroma_id}_200")],
         [InlineKeyboardButton(text="📝 Ввести вручную", callback_data=f"manual_{aroma_id}")],
         [InlineKeyboardButton(text="Назад к ароматам", callback_data=f"show_aromas_{aroma[1]}")]
     ]
