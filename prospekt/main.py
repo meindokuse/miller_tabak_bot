@@ -13,7 +13,7 @@ from database import (get_product_by_id, get_aroma_by_id, update_aroma_quantity,
 from service import show_admin_products, show_admin_aromas, show_low_stock_aromas, show_inventory, \
     show_aromas_by_category
 
-TRUSTED_CHAT_IDS = [1082039395, 444627449, 784523005] # Список доверенных chat_id
+TRUSTED_CHAT_IDS = [1082039395, 444627449, 883974728]  # Список доверенных chat_id
 
 bot = Bot(token=os.getenv("BOT_TOKEN"))
 dp = Dispatcher()
@@ -29,8 +29,9 @@ class AdminStates(StatesGroup):
     EnterNewAromaCategoryEdit = State()
     EnterSupplyData = State()
     EnterBulkAddAromas = State()
-    ConfirmDeleteProduct = State()  # Состояние для подтверждения удаления товара
-    ConfirmDeleteAroma = State()   # Состояние для подтверждения удаления аромата
+    ConfirmDeleteProduct = State()
+    ConfirmDeleteAroma = State()
+    EnterBulkDeleteAromas = State()  # Состояние для массового удаления ароматов
 
 
 # Проверка доверенного chat_id
@@ -67,6 +68,7 @@ async def admin_product(callback: CallbackQuery):
         [InlineKeyboardButton(text="❌ Удалить товар", callback_data=f"delete_product_{product_id}")],
         [InlineKeyboardButton(text="✏️ Редактировать название", callback_data=f"edit_product_name_{product_id}")],
         [InlineKeyboardButton(text="Ароматы", callback_data=f"show_aromas_{product_id}")],
+        [InlineKeyboardButton(text="🗑️ Удалить ароматы списком", callback_data=f"bulk_delete_aromas_{product_id}")],  # Новая кнопка
         [InlineKeyboardButton(text="Назад к товарам", callback_data="main")]
     ]
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
@@ -293,20 +295,31 @@ async def admin_delete_product(callback: CallbackQuery, state: FSMContext):
         return
     product_id = int(callback.data.split("_")[2])
     product = await get_product_by_id(product_id)
+    if not product:
+        await bot.edit_message_text(
+            text="Товар не найден!",
+            chat_id=str(callback.message.chat.id),
+            message_id=callback.message.message_id
+        )
+        return
     keyboard = [
-        [InlineKeyboardButton(text="Подтвердить", callback_data=f"confirm_delete_product_{product_id}")],
-        [InlineKeyboardButton(text="Отмена", callback_data="main")]
+        [InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"confirm_delete_product_{product_id}")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="main")]
     ]
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-    await bot.answer_callback_query(callback.id)
-    await bot.edit_message_text(
-        text=f"Вы уверены, что хотите удалить товар '{product[1]}'?",
-        chat_id=str(callback.message.chat.id),
-        message_id=callback.message.message_id,
-        reply_markup=reply_markup
-    )
     await state.set_state(AdminStates.ConfirmDeleteProduct)
     await state.update_data(product_id=product_id, message_id=callback.message.message_id)
+    await bot.answer_callback_query(callback.id)
+    try:
+        await bot.edit_message_text(
+            text=f"Вы уверены, что хотите удалить товар '{product[1]}'?\nЭто действие нельзя отменить!",
+            chat_id=str(callback.message.chat.id),
+            message_id=callback.message.message_id,
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        print(f"Ошибка при отправке сообщения подтверждения: {e}")
+        await bot.send_message(str(callback.message.chat.id), "Произошла ошибка, попробуйте снова.")
 
 
 @dp.callback_query(lambda c: c.data.startswith("confirm_delete_product_"))
@@ -315,16 +328,24 @@ async def confirm_delete_product(callback: CallbackQuery, state: FSMContext):
         await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
         return
     product_id = int(callback.data.split("_")[3])
-    await delete_product_db(product_id)
-    await bot.answer_callback_query(callback.id)
-    await bot.edit_message_text(
-        text="Товар успешно удалён!",
-        chat_id=str(callback.message.chat.id),
-        message_id=callback.message.message_id
-    )
+    try:
+        await delete_product_db(product_id)
+        await bot.answer_callback_query(callback.id)
+        await bot.edit_message_text(
+            text="Товар успешно удалён!",
+            chat_id=str(callback.message.chat.id),
+            message_id=callback.message.message_id
+        )
+        await asyncio.sleep(1)
+        await show_admin_products(callback.message, edit_message_id=callback.message.message_id)
+    except Exception as e:
+        print(f"Ошибка при удалении товара: {e}")
+        await bot.edit_message_text(
+            text="Ошибка при удалении товара!",
+            chat_id=str(callback.message.chat.id),
+            message_id=callback.message.message_id
+        )
     await state.clear()
-    await asyncio.sleep(1)
-    await show_admin_products(callback.message, edit_message_id=callback.message.message_id)
 
 
 @dp.callback_query(lambda c: c.data.startswith("delete_aroma_"))
@@ -334,20 +355,31 @@ async def admin_delete_aroma(callback: CallbackQuery, state: FSMContext):
         return
     aroma_id = int(callback.data.split("_")[2])
     aroma = await get_aroma_by_id(aroma_id)
+    if not aroma:
+        await bot.edit_message_text(
+            text="Аромат не найден!",
+            chat_id=str(callback.message.chat.id),
+            message_id=callback.message.message_id
+        )
+        return
     keyboard = [
-        [InlineKeyboardButton(text="Подтвердить", callback_data=f"confirm_delete_aroma_{aroma_id}")],
-        [InlineKeyboardButton(text="Отмена", callback_data=f"show_aromas_{aroma[1]}")]
+        [InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"confirm_delete_aroma_{aroma_id}")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data=f"show_aromas_{aroma[1]}")]
     ]
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-    await bot.answer_callback_query(callback.id)
-    await bot.edit_message_text(
-        text=f"Вы уверены, что хотите удалить аромат '{aroma[2]}'?",
-        chat_id=str(callback.message.chat.id),
-        message_id=callback.message.message_id,
-        reply_markup=reply_markup
-    )
     await state.set_state(AdminStates.ConfirmDeleteAroma)
     await state.update_data(aroma_id=aroma_id, product_id=aroma[1], message_id=callback.message.message_id)
+    await bot.answer_callback_query(callback.id)
+    try:
+        await bot.edit_message_text(
+            text=f"Вы уверены, что хотите удалить аромат '{aroma[2]}'?\nЭто действие нельзя отменить!",
+            chat_id=str(callback.message.chat.id),
+            message_id=callback.message.message_id,
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        print(f"Ошибка при отправке сообщения подтверждения: {e}")
+        await bot.send_message(str(callback.message.chat.id), "Произошла ошибка, попробуйте снова.")
 
 
 @dp.callback_query(lambda c: c.data.startswith("confirm_delete_aroma_"))
@@ -358,16 +390,84 @@ async def confirm_delete_aroma(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     aroma_id = int(callback.data.split("_")[3])
     product_id = data['product_id']
-    await delete_aroma_db(aroma_id)
+    try:
+        await delete_aroma_db(aroma_id)
+        await bot.answer_callback_query(callback.id)
+        await bot.edit_message_text(
+            text="Аромат успешно удалён!",
+            chat_id=str(callback.message.chat.id),
+            message_id=callback.message.message_id
+        )
+        await asyncio.sleep(1)
+        await show_admin_aromas(callback.message, product_id, edit_message_id=callback.message.message_id)
+    except Exception as e:
+        print(f"Ошибка при удалении аромата: {e}")
+        await bot.edit_message_text(
+            text="Ошибка при удалении аромата!",
+            chat_id=str(callback.message.chat.id),
+            message_id=callback.message.message_id
+        )
+    await state.clear()
+
+
+@dp.callback_query(lambda c: c.data.startswith("bulk_delete_aromas_"))
+async def admin_bulk_delete_aromas(callback: CallbackQuery, state: FSMContext):
+    if not is_trusted_user(callback.from_user.id):
+        await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
+        return
+    product_id = int(callback.data.split("_")[3])
+    await state.set_state(AdminStates.EnterBulkDeleteAromas)
+    await state.update_data(product_id=product_id, message_id=callback.message.message_id)
     await bot.answer_callback_query(callback.id)
     await bot.edit_message_text(
-        text="Аромат успешно удалён!",
+        text="Введите список ароматов для удаления (по одному на строку):\nПример:\nклубника\nЯблоко\nкиви",
         chat_id=str(callback.message.chat.id),
         message_id=callback.message.message_id
     )
+
+
+@dp.message(AdminStates.EnterBulkDeleteAromas)
+async def process_bulk_delete_aromas(message: Message, state: FSMContext):
+    if not is_trusted_user(message.from_user.id):
+        await message.answer("Доступ только для доверенных администраторов.")
+        return
+    data = await state.get_data()
+    product_id = data['product_id']
+    message_id = data['message_id']
+    aromas = await get_aromas(product_id, offset=0, limit=9999)
+    aroma_dict = {aroma[1].lower(): aroma[0] for aroma in aromas}  # Приводим имена в базе к нижнему регистру
+    lines = message.text.strip().split('\n')
+    deleted_aromas = []
+    errors = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        aroma_name = line.lower()  # Приводим введённое имя к нижнему регистру
+        if aroma_name in aroma_dict:
+            aroma_id = aroma_dict[aroma_name]
+            await delete_aroma_db(aroma_id)
+            deleted_aromas.append(f"{line}")
+            del aroma_dict[aroma_name]  # Удаляем из словаря, чтобы избежать повторного удаления
+        else:
+            errors.append(f"Аромат не найден: {line}")
+    response_text = "🗑️ Результат удаления ароматов:\n\n"
+    if deleted_aromas:
+        response_text += "Удалены:\n" + "\n".join(deleted_aromas) + "\n\n"
+    if errors:
+        response_text += "Ошибки:\n" + "\n".join(errors)
+    else:
+        response_text += "Все указанные ароматы успешно удалены!"
+    keyboard = [[InlineKeyboardButton(text="К списку ароматов", callback_data=f"show_aromas_{product_id}")]]
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    await bot.delete_message(chat_id=str(message.chat.id), message_id=message.message_id)
+    await bot.edit_message_text(
+        text=response_text,
+        chat_id=str(message.chat.id),
+        message_id=message_id,
+        reply_markup=reply_markup
+    )
     await state.clear()
-    await asyncio.sleep(1)
-    await show_admin_aromas(callback.message, product_id, edit_message_id=callback.message.message_id)
 
 
 @dp.callback_query(lambda c: c.data.startswith("low_stock_prev_"))
@@ -466,11 +566,21 @@ async def process_manual_quantity(message: Message, state: FSMContext):
     data = await state.get_data()
     aroma_id = data['aroma_id']
     message_id = data['message_id']
-    new_quantity = int(message.text)
-    await update_aroma_quantity(aroma_id, new_quantity)
-    await bot.delete_message(chat_id=str(message.chat.id), message_id=message.message_id)
-    await show_admin_aromas(message, (await get_aroma_by_id(aroma_id))[1], edit_message_id=message_id)
-    await state.clear()
+    try:
+        new_quantity = int(message.text)
+        if new_quantity < 0:
+            raise ValueError("Количество не может быть отрицательным")
+        await update_aroma_quantity(aroma_id, new_quantity)
+        await bot.delete_message(chat_id=str(message.chat.id), message_id=message.message_id)
+        await show_admin_aromas(message, (await get_aroma_by_id(aroma_id))[1], edit_message_id=message_id)
+        await state.clear()
+    except ValueError as e:
+        await bot.delete_message(chat_id=str(message.chat.id), message_id=message.message_id)
+        await bot.edit_message_text(
+            text=f"Ошибка: {str(e)}. Введите корректное число (например, 100):",
+            chat_id=str(message.chat.id),
+            message_id=message_id
+        )
 
 
 @dp.message(AdminStates.EnterNewProductName)
@@ -518,7 +628,7 @@ async def process_aroma_quantity(message: Message, state: FSMContext):
     try:
         quantity = int(message.text)
         if quantity < 0:
-            raise ValueError
+            raise ValueError("Количество не может быть отрицательным")
         await state.update_data(quantity=quantity)
         await state.set_state(AdminStates.EnterNewAromaCategory)
         await bot.delete_message(chat_id=str(message.chat.id), message_id=message.message_id)
