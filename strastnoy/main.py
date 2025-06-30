@@ -1,6 +1,5 @@
 import asyncio
 import os
-
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
@@ -31,7 +30,7 @@ class AdminStates(StatesGroup):
     EnterBulkAddAromas = State()
     ConfirmDeleteProduct = State()
     ConfirmDeleteAroma = State()
-    EnterBulkDeleteAromas = State()  # Состояние для массового удаления ароматов
+    EnterBulkSubtractAromas = State()  # Состояние для массового вычитания граммов
 
 
 # Проверка доверенного chat_id
@@ -68,7 +67,6 @@ async def admin_product(callback: CallbackQuery):
         [InlineKeyboardButton(text="❌ Удалить товар", callback_data=f"delete_product_{product_id}")],
         [InlineKeyboardButton(text="✏️ Редактировать название", callback_data=f"edit_product_name_{product_id}")],
         [InlineKeyboardButton(text="Ароматы", callback_data=f"show_aromas_{product_id}")],
-        [InlineKeyboardButton(text="🗑️ Удалить ароматы списком", callback_data=f"bulk_delete_aromas_{product_id}")],  # Новая кнопка
         [InlineKeyboardButton(text="Назад к товарам", callback_data="main")]
     ]
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
@@ -410,24 +408,24 @@ async def confirm_delete_aroma(callback: CallbackQuery, state: FSMContext):
     await state.clear()
 
 
-@dp.callback_query(lambda c: c.data.startswith("bulk_delete_aromas_"))
-async def admin_bulk_delete_aromas(callback: CallbackQuery, state: FSMContext):
+@dp.callback_query(lambda c: c.data.startswith("bulk_subtract_aromas_"))
+async def admin_bulk_subtract_aromas(callback: CallbackQuery, state: FSMContext):
     if not is_trusted_user(callback.from_user.id):
         await bot.send_message(str(callback.from_user.id), "Доступ только для доверенных администраторов.")
         return
     product_id = int(callback.data.split("_")[3])
-    await state.set_state(AdminStates.EnterBulkDeleteAromas)
+    await state.set_state(AdminStates.EnterBulkSubtractAromas)
     await state.update_data(product_id=product_id, message_id=callback.message.message_id)
     await bot.answer_callback_query(callback.id)
     await bot.edit_message_text(
-        text="Введите список ароматов для удаления (по одному на строку):\nПример:\nклубника\nЯблоко\nкиви",
+        text="Введите список ароматов для вычитания в формате:\n(название аромата) (кол-во грамм)\nПример:\nклубника 100\nЯблоко 200\nкиви 150",
         chat_id=str(callback.message.chat.id),
         message_id=callback.message.message_id
     )
 
 
-@dp.message(AdminStates.EnterBulkDeleteAromas)
-async def process_bulk_delete_aromas(message: Message, state: FSMContext):
+@dp.message(AdminStates.EnterBulkSubtractAromas)
+async def process_bulk_subtract_aromas(message: Message, state: FSMContext):
     if not is_trusted_user(message.from_user.id):
         await message.answer("Доступ только для доверенных администраторов.")
         return
@@ -435,29 +433,42 @@ async def process_bulk_delete_aromas(message: Message, state: FSMContext):
     product_id = data['product_id']
     message_id = data['message_id']
     aromas = await get_aromas(product_id, offset=0, limit=9999)
-    aroma_dict = {aroma[1].lower(): aroma[0] for aroma in aromas}  # Приводим имена в базе к нижнему регистру
+    aroma_dict = {aroma[1].lower(): (aroma[0], int(aroma[2])) for aroma in aromas}
     lines = message.text.strip().split('\n')
-    deleted_aromas = []
+    updated_aromas = []
     errors = []
     for line in lines:
         line = line.strip()
         if not line:
             continue
-        aroma_name = line.lower()  # Приводим введённое имя к нижнему регистру
+        parts = line.split()
+        if len(parts) < 2:
+            errors.append(f"Неверный формат строки: {line}")
+            continue
+        quantity_str = parts[-1]
+        aroma_name = " ".join(parts[:-1]).lower()
+        try:
+            quantity_to_subtract = int(quantity_str)
+            if quantity_to_subtract < 0:
+                errors.append(f"Количество не может быть отрицательным: {line}")
+                continue
+        except ValueError:
+            errors.append(f"Неверное количество в строке: {line}")
+            continue
         if aroma_name in aroma_dict:
-            aroma_id = aroma_dict[aroma_name]
-            await delete_aroma_db(aroma_id)
-            deleted_aromas.append(f"{line}")
-            del aroma_dict[aroma_name]  # Удаляем из словаря, чтобы избежать повторного удаления
+            aroma_id, current_quantity = aroma_dict[aroma_name]
+            new_quantity = max(0, current_quantity - quantity_to_subtract)
+            await update_aroma_quantity(aroma_id, new_quantity)
+            updated_aromas.append(f"{aroma_name} (-{quantity_to_subtract} гр, теперь {new_quantity} гр)")
         else:
-            errors.append(f"Аромат не найден: {line}")
-    response_text = "🗑️ Результат удаления ароматов:\n\n"
-    if deleted_aromas:
-        response_text += "Удалены:\n" + "\n".join(deleted_aromas) + "\n\n"
+            errors.append(f"Аромат не найден: {aroma_name}")
+    response_text = "➖ Результат вычитания граммов:\n\n"
+    if updated_aromas:
+        response_text += "Обновлены:\n" + "\n".join(updated_aromas) + "\n\n"
     if errors:
         response_text += "Ошибки:\n" + "\n".join(errors)
     else:
-        response_text += "Все указанные ароматы успешно удалены!"
+        response_text += "Все ароматы успешно обновлены!"
     keyboard = [[InlineKeyboardButton(text="К списку ароматов", callback_data=f"show_aromas_{product_id}")]]
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
     await bot.delete_message(chat_id=str(message.chat.id), message_id=message.message_id)

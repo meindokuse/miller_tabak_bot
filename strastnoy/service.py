@@ -73,6 +73,7 @@ async def show_admin_aromas(message: types.Message, product_id, offset=0, edit_m
     keyboard.append(
         [InlineKeyboardButton(text="📋 Добавить ароматы списком", callback_data=f"bulk_add_aromas_{product_id}")])
     keyboard.append([InlineKeyboardButton(text="📦 Поставка", callback_data=f"supply_{product_id}")])
+    keyboard.append([InlineKeyboardButton(text="➖ Вычесть граммы списком", callback_data=f"bulk_subtract_aromas_{product_id}")])
     keyboard.append([InlineKeyboardButton(text="Назад к товарам", callback_data="main")])
 
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
@@ -120,9 +121,11 @@ async def show_low_stock_aromas(message: types.Message, offset=0, edit_message_i
         keyboard = []
         pagination_row = []
         if offset > 0:
-            pagination_row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"low_stock_prev_{offset - limit}"))
+            pagination_row.append(
+                InlineKeyboardButton(text="⬅️ Назад", callback_data=f"low_stock_prev_{offset - limit}"))
         if offset + limit < total_aromas:
-            pagination_row.append(InlineKeyboardButton(text="Вперед ➡️", callback_data=f"low_stock_next_{offset + limit}"))
+            pagination_row.append(
+                InlineKeyboardButton(text="Вперед ➡️", callback_data=f"low_stock_next_{offset + limit}"))
         if pagination_row:
             keyboard.append(pagination_row)
         keyboard.append([InlineKeyboardButton(text="Назад к товарам", callback_data="main")])
@@ -145,6 +148,7 @@ async def show_low_stock_aromas(message: types.Message, offset=0, edit_message_i
             await message.answer(text, reply_markup=reply_markup, parse_mode="Markdown")
     else:
         await message.answer(text, reply_markup=reply_markup, parse_mode="Markdown")
+
 
 async def show_aromas_by_category(message: types.Message, category, offset=0, edit_message_id=None):
     limit = 10
@@ -170,9 +174,11 @@ async def show_aromas_by_category(message: types.Message, category, offset=0, ed
         keyboard = []
         pagination_row = []
         if offset > 0:
-            pagination_row.append(InlineKeyboardButton(text="⬅️ Назад", callback_data=f"category_{category}_prev_{offset - limit}"))
+            pagination_row.append(
+                InlineKeyboardButton(text="⬅️ Назад", callback_data=f"category_{category}_prev_{offset - limit}"))
         if offset + limit < total_aromas:
-            pagination_row.append(InlineKeyboardButton(text="Вперед ➡️", callback_data=f"category_{category}_next_{offset + limit}"))
+            pagination_row.append(
+                InlineKeyboardButton(text="Вперед ➡️", callback_data=f"category_{category}_next_{offset + limit}"))
         if pagination_row:
             keyboard.append(pagination_row)
         keyboard.append([InlineKeyboardButton(text="Назад к товарам", callback_data="main")])
